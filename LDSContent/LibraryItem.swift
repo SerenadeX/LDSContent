@@ -49,7 +49,6 @@ public struct LibraryItem: LibraryNode, Equatable, Hashable {
     public var hashValue: Int {
         return Int(id)
     }
-    
 }
 
 public func == (lhs: LibraryItem, rhs: LibraryItem) -> Bool {

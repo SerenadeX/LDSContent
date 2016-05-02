@@ -28,10 +28,12 @@ import FTS3HTMLTokenizer
 public class ItemPackage {
     
     let db: Connection
+    public let path: NSURL
     
-    public init(path: String? = nil) throws {
+    public init(path: NSURL) throws {
         do {
-            db = try Connection(path ?? "")
+            db = try Connection(path.path ?? "")
+            self.path = path
         } catch {
             throw error
         }
@@ -78,6 +80,23 @@ public class ItemPackage {
     
     public var itemExternalID: String? {
         return self.stringForMetadataKey("item_external_id")
+    }
+    
+    public func itemHeadHTML() -> String {
+        guard let packageDirectory = path.path else { return "" }
+
+        do {
+            return try NSFileManager.defaultManager().contentsOfDirectoryAtURL(path, includingPropertiesForKeys: nil, options: .SkipsPackageDescendants).flatMap { fileURL -> String? in
+                guard fileURL.pathExtension == "css", let filePath = fileURL.path else { return nil }
+                return "<link rel=\"stylesheet\" href=\"\(filePath)\"/>"
+            }.joinWithSeparator("\n")
+        } catch {
+            return ""
+        }
+    }
+    
+    public func scriptureGotoURL() -> NSURL {
+        return path.URLByAppendingPathComponent("scriptureGoto.plist")
     }
     
 }
@@ -199,223 +218,6 @@ extension ItemPackage {
 
 extension ItemPackage {
     
-    class SubitemTable {
-        
-        static let table = Table("subitem")
-        static let id = Expression<Int64>("_id")
-        static let uri = Expression<String>("uri")
-        static let docID = Expression<String>("doc_id")
-        static let docVersion = Expression<Int>("doc_version")
-        static let position = Expression<Int>("position")
-        static let titleHTML = Expression<String>("title_html")
-        static let title = Expression<String>("title")
-        static let webURL = Expression<String>("web_url")
-        static let contentType = Expression<ContentType>("content_type")
-        
-        static func fromRow(row: Row) -> Subitem {
-            return Subitem(id: row[id], uri: row[uri], docID: row[docID], docVersion: row[docVersion], position: row[position], titleHTML: row[titleHTML], title: row[title], webURL: NSURL(string: row[webURL]), contentType: row.get(contentType))
-        }
-        
-    }
-    
-    public func subitemWithURI(uri: String) -> Subitem? {
-        return db.pluck(SubitemTable.table.filter(SubitemTable.uri == uri)).map { SubitemTable.fromRow($0) }
-    }
-    
-    public func subitemWithDocID(docID: String) -> Subitem? {
-        return db.pluck(SubitemTable.table.filter(SubitemTable.docID == docID)).map { SubitemTable.fromRow($0) }
-    }
-    
-    public func subitemWithID(id: Int64) -> Subitem? {
-        return db.pluck(SubitemTable.table.filter(SubitemTable.id == id)).map { SubitemTable.fromRow($0) }
-    }
-    
-    public func subitemAtPosition(position: Int) -> Subitem? {
-        return db.pluck(SubitemTable.table.filter(SubitemTable.position == position)).map { SubitemTable.fromRow($0) }
-    }
-    
-    public func subitems() -> [Subitem] {
-        do {
-            return try db.prepare(SubitemTable.table.order(SubitemTable.position)).map { SubitemTable.fromRow($0) }
-        } catch {
-            return []
-        }
-    }
-    
-    public func subitemsWithURIs(uris: [String]) -> [Subitem] {
-        do {
-            return try db.prepare(SubitemTable.table.filter(uris.contains(SubitemTable.uri)).order(SubitemTable.position)).map { SubitemTable.fromRow($0) }
-        } catch {
-            return []
-        }
-    }
-    
-    public func subitemsWithURIPrefixedByURI(uri: String) -> [Subitem] {
-        do {
-            return try db.prepare(SubitemTable.table.filter(SubitemTable.uri.like("\(uri.escaped())%", escape: "!")).order(SubitemTable.position)).map { SubitemTable.fromRow($0) }
-        } catch {
-            return []
-        }
-    }
-    
-    public func subitemsWithAuthor(author: Author) -> [Subitem] {
-        do {
-            return try db.prepare(SubitemTable.table.filter(SubitemTable.id == SubitemAuthorTable.subitemID && SubitemAuthorTable.authorID == author.id).order(SubitemTable.position)).map { SubitemTable.fromRow($0) }
-        } catch {
-            return []
-        }
-    }
-    
-}
-
-extension ItemPackage {
-    
-    class RelatedContentItemTable {
-        
-        static let table = Table("related_content_item")
-        static let id = Expression<Int64>("_id")
-        static let subitemID = Expression<Int64>("subitem_id")
-        static let refID = Expression<String>("ref_id")
-        static let labelHTML = Expression<String>("label_html")
-        static let originID = Expression<String>("origin_id")
-        static let contentHTML = Expression<String>("content_html")
-        static let wordOffset = Expression<Int>("word_offset")
-        static let byteLocation = Expression<Int>("byte_location")
-        
-        static func fromRow(row: Row) -> RelatedContentItem {
-            return RelatedContentItem(id: row[id], subitemID: row[subitemID], refID: row[refID], labelHTML: row[labelHTML], originID: row[originID], contentHTML: row[contentHTML], wordOffset: row[wordOffset], byteLocation: row[byteLocation])
-        }
-        
-    }
-    
-    public func relatedContentItemsForSubitemWithID(subitemID: Int64) -> [RelatedContentItem] {
-        do {
-            return try db.prepare(RelatedContentItemTable.table.filter(RelatedContentItemTable.subitemID == subitemID).order(RelatedContentItemTable.byteLocation)).map { RelatedContentItemTable.fromRow($0) }
-        } catch {
-            return []
-        }
-    }
-    
-}
-
-extension ItemPackage {
-    
-    class RelatedAudioItemTable {
-        
-        static let table = Table("related_audio_item")
-        static let id = Expression<Int64>("_id")
-        static let subitemID = Expression<Int64>("subitem_id")
-        static let mediaURL = Expression<String>("media_url")
-        static let fileSize = Expression<Int>("file_size")
-        static let duration = Expression<Int>("duration")
-        
-        static func fromRow(row: Row) -> RelatedAudioItem {
-            return RelatedAudioItem(id: row[id], subitemID: row[subitemID], mediaURL: NSURL(string: row[mediaURL])!, fileSize: row[fileSize], duration: row[duration])
-        }
-        
-        static func fromNamespacedRow(row: Row) -> RelatedAudioItem {
-            return RelatedAudioItem(id: row[RelatedAudioItemTable.table[id]], subitemID: row[RelatedAudioItemTable.table[subitemID]], mediaURL: NSURL(string: row[RelatedAudioItemTable.table[mediaURL]])!, fileSize: row[RelatedAudioItemTable.table[fileSize]], duration: row[RelatedAudioItemTable.table[duration]])
-        }
-        
-    }
-    
-    public func relatedAudioItemsForSubitemWithID(subitemID: Int64) -> [RelatedAudioItem] {
-        do {
-            return try db.prepare(RelatedAudioItemTable.table.filter(RelatedAudioItemTable.subitemID == subitemID)).map { RelatedAudioItemTable.fromRow($0) }
-        } catch {
-            return []
-        }
-    }
-    
-    public func hasRelatedAudioItemsForSubitemsPrefixedByURI(uri: String) -> Bool {
-        return db.scalar(RelatedAudioItemTable.table.join(SubitemTable.table, on: RelatedAudioItemTable.subitemID == SubitemTable.table[SubitemTable.id]).filter(SubitemTable.uri.like("\(uri.escaped())%", escape: "!")).count) > 0
-    }
-    
-    public func relatedAudioItemsForSubitemsPrefixedByURI(uri: String) -> [RelatedAudioItem] {
-        do {
-            return try db.prepare(RelatedAudioItemTable.table.join(SubitemTable.table, on: RelatedAudioItemTable.subitemID == SubitemTable.table[SubitemTable.id]).filter(SubitemTable.uri.like("\(uri.escaped())%", escape: "!"))).map { RelatedAudioItemTable.fromNamespacedRow($0) }
-        } catch {
-            return []
-        }
-    }
-    
-}
-
-extension ItemPackage {
-    
-    class NavCollectionTable {
-        
-        static let table = Table("nav_collection")
-        static let id = Expression<Int64>("_id")
-        static let navSectionID = Expression<Int64?>("nav_section_id")
-        static let position = Expression<Int>("position")
-        static let imageRenditions = Expression<String?>("image_renditions")
-        static let titleHTML = Expression<String>("title_html")
-        static let subtitle = Expression<String?>("subtitle")
-        static let uri = Expression<String>("uri")
-        
-        static func fromRow(row: Row) -> NavCollection {
-            return NavCollection(id: row[id], navSectionID: row[navSectionID], position: row[position], imageRenditions: (row[imageRenditions] ?? "").toImageRenditions() ?? [], titleHTML: row[titleHTML], subtitle: row[subtitle], uri: row[uri])
-        }
-        
-    }
-    
-    public func rootNavCollection() -> NavCollection? {
-        return db.pluck(NavCollectionTable.table.filter(NavCollectionTable.navSectionID == nil)).map { NavCollectionTable.fromRow($0) }
-    }
-    
-    public func navCollectionWithID(id: Int64) -> NavCollection? {
-        return db.pluck(NavCollectionTable.table.filter(NavCollectionTable.id == id)).map { NavCollectionTable.fromRow($0) }
-    }
-    
-    public func navCollectionWithURI(uri: String) -> NavCollection? {
-        return db.pluck(NavCollectionTable.table.filter(NavCollectionTable.uri == uri)).map { NavCollectionTable.fromRow($0) }
-    }
-    
-    public func navCollectionsForNavSectionWithID(navSectionID: Int64) -> [NavCollection] {
-        do {
-            return try db.prepare(NavCollectionTable.table.filter(NavCollectionTable.navSectionID == navSectionID).order(NavCollectionTable.position)).map { NavCollectionTable.fromRow($0) }
-        } catch {
-            return []
-        }
-    }
-    
-}
-
-extension ItemPackage {
-    
-    class NavCollectionIndexEntryTable {
-        
-        static let table = Table("nav_collection_index_entry")
-        static let id = Expression<Int64>("_id")
-        static let navCollectionID = Expression<Int64>("nav_collection_id")
-        static let position = Expression<Int>("position")
-        static let title = Expression<String>("title")
-        static let refNavCollectionID = Expression<Int64?>("ref_nav_collection_id")
-        static let refNavItemID = Expression<Int64?>("ref_nav_item_id")
-        
-        static func fromRow(row: Row) -> NavCollectionIndexEntry {
-            return NavCollectionIndexEntry(id: row[id], navCollectionID: row[navCollectionID], position: row[position], title: row[title], refNavCollectionID: row[refNavCollectionID], refNavItemID: row[refNavItemID])
-        }
-        
-    }
-    
-    public func navCollectionIndexEntryWithID(id: Int64) -> NavCollectionIndexEntry? {
-        return db.pluck(NavCollectionIndexEntryTable.table.filter(NavCollectionIndexEntryTable.id == id)).map { NavCollectionIndexEntryTable.fromRow($0) }
-    }
-    
-    public func navCollectionIndexEntriesForNavCollectionWithID(navCollectionID: Int64) -> [NavCollectionIndexEntry] {
-        do {
-            return try db.prepare(NavCollectionIndexEntryTable.table.filter(NavCollectionIndexEntryTable.navCollectionID == navCollectionID).order(NavCollectionIndexEntryTable.position)).map { NavCollectionIndexEntryTable.fromRow($0) }
-        } catch {
-            return []
-        }
-    }
-    
-}
-
-extension ItemPackage {
-    
     class NavSectionTable {
         
         static let table = Table("nav_section")
@@ -441,6 +243,10 @@ extension ItemPackage {
         } catch {
             return []
         }
+    }
+    
+    public func numberOfNavSectionsForNavCollectionWithID(navCollectionID: Int64) -> Int {
+        return db.scalar(NavSectionTable.table.filter(NavSectionTable.navCollectionID == navCollectionID).order(NavSectionTable.position).count)
     }
     
 }
@@ -487,59 +293,6 @@ extension ItemPackage {
         navNodes += navCollectionsForNavSectionWithID(navSectionID).map { $0 as NavNode }
         navNodes += navItemsForNavSectionWithID(navSectionID).map { $0 as NavNode }
         return navNodes.sort { $0.position < $1.position }
-    }
-    
-}
-
-extension ItemPackage {
-    
-    class ParagraphMetadataTable {
-        
-        static let table = Table("paragraph_metadata")
-        static let id = Expression<Int64>("_id")
-        static let subitemID = Expression<Int64>("subitem_id")
-        static let paragraphID = Expression<String>("paragraph_id")
-        static let paragraphAID = Expression<String>("paragraph_aid")
-        static let verseNumber = Expression<String?>("verse_number")
-        static let startIndex = Expression<Int>("start_index")
-        static let endIndex = Expression<Int>("end_index")
-        
-        static func fromRow(row: Row) -> ParagraphMetadata {
-            return ParagraphMetadata(id: row[id], subitemID: row[subitemID], paragraphID: row[paragraphID], paragraphAID: row[paragraphAID], verseNumber: row[verseNumber], range: NSRange(location: row[startIndex], length: row[endIndex] - row[startIndex]))
-        }
-        
-        static func fromNamespacedRow(row: Row) -> ParagraphMetadata {
-            return ParagraphMetadata(id: row[ParagraphMetadataTable.table[id]], subitemID: row[ParagraphMetadataTable.table[subitemID]], paragraphID: row[ParagraphMetadataTable.table[paragraphID]], paragraphAID: row[ParagraphMetadataTable.table[paragraphAID]], verseNumber: row[ParagraphMetadataTable.table[verseNumber]], range: NSRange(location: row[ParagraphMetadataTable.table[startIndex]], length: row[ParagraphMetadataTable.table[endIndex]] - row[ParagraphMetadataTable.table[startIndex]]))
-        }
-        
-    }
-    
-    public func paragraphMetadataForParagraphIDs(paragraphIDs: [String], subitemID: Int64) -> [ParagraphMetadata] {
-        do {
-            return try db.prepare(ParagraphMetadataTable.table.filter(paragraphIDs.contains(ParagraphMetadataTable.paragraphID) && ParagraphMetadataTable.subitemID == subitemID)).map { ParagraphMetadataTable.fromRow($0) }
-        } catch {
-            return []
-        }
-    }
-    
-    public func paragraphMetadataForParagraphAIDs(paragraphAIDs: [String], subitemID: Int64) -> [ParagraphMetadata] {
-        do {
-            return try db.prepare(ParagraphMetadataTable.table.filter(paragraphAIDs.contains(ParagraphMetadataTable.paragraphAID) && ParagraphMetadataTable.subitemID == subitemID)).map { ParagraphMetadataTable.fromRow($0) }
-        } catch {
-            return []
-        }
-    }
-    
-    public func paragraphMetadataForParagraphAIDs(paragraphAIDs: [String], docID: String) -> [ParagraphMetadata] {
-        do {
-            return try db.prepare(ParagraphMetadataTable.table.join(SubitemTable.table, on: ParagraphMetadataTable.subitemID == SubitemTable.table[SubitemTable.id]).filter(paragraphAIDs.contains(ParagraphMetadataTable.paragraphAID) && SubitemTable.docID == docID)).map { ParagraphMetadataTable.fromNamespacedRow($0) }
-        } catch {
-            return []
-        }
-    }
-    
-    public func paragraphMetadataForParagraphID(paragraphID: String, subitemID: Int64) -> ParagraphMetadata? {
-        return db.pluck(ParagraphMetadataTable.table.filter(ParagraphMetadataTable.subitemID == subitemID && ParagraphMetadataTable.paragraphID == paragraphID)).map { ParagraphMetadataTable.fromRow($0) }
     }
     
 }

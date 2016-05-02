@@ -22,7 +22,7 @@
 
 import Foundation
 
-public struct RelatedContentItem: Equatable {
+public class RelatedContentItem: Equatable {
     
     public var id: Int64
     public var subitemID: Int64

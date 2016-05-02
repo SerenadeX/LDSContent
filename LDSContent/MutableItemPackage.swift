@@ -25,7 +25,7 @@ import SQLite
 
 public class MutableItemPackage: ItemPackage {
     
-    public init(path: String? = nil, iso639_1Code: String, iso639_3Code: String) throws {
+    public init(path: NSURL, iso639_1Code: String, iso639_3Code: String) throws {
         try super.init(path: path)
         
         try createDatabaseTables(iso639_1Code: iso639_1Code)

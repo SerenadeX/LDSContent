@@ -22,7 +22,7 @@
 
 import Foundation
 
-public struct LibraryCollection: LibraryNode, Equatable {
+public class LibraryCollection: LibraryNode, Equatable {
     
     public var id: Int64
     public var externalID: String

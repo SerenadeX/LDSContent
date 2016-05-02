@@ -35,22 +35,35 @@ public class ContentController {
     public let itemPackageUpdateObservers = ObserverSet<ItemPackage>()
     public let itemPackageUninstallObservers = ObserverSet<Item>()
     
+    public static var sharedController: ContentController?
+    
+    public static func setSharedController(location: NSURL) {
+        sharedController = try? ContentController(location: location)
+    }
+    
     /// Constructs a controller for content at `location`.
     public init(location: NSURL) throws {
         self.location = location
         
         do {
-            contentInventory = try ContentInventory(path: location.URLByAppendingPathComponent("Inventory.sqlite").path)
+            // TODO: Change back
+            contentInventory = try ContentInventory(path: location.URLByAppendingPathComponent("ItemInventory.sqlite").path)
+            //contentInventory = try ContentInventory(path: location.URLByAppendingPathComponent("Inventory.sqlite").path)
         } catch {
+            print(error)
             throw error
         }
     }
     
     /// The currently installed catalog.
     public var catalog: Catalog? {
-        guard let catalogVerson = contentInventory.catalogVersion else { return nil }
+//        print(contentInventory)
+//        print("version: \(contentInventory.catalogVersion)")
+//        guard let catalogVerson = contentInventory.catalogVersion else { return nil }
         
-        return try? Catalog(path: location.URLByAppendingPathComponent("Catalog/\(catalogVerson)/Catalog.sqlite").path)
+        // TODO: Change back
+        return try? Catalog(path: location.URLByAppendingPathComponent("MergedCatalog.sqlite").path)
+        //return try? Catalog(path: location.URLByAppendingPathComponent("Catalog/\(catalogVerson)/Catalog.sqlite").path)
     }
     
     /// Checks the server for the latest catalog version and installs it if newer than the currently
@@ -105,10 +118,23 @@ public class ContentController {
     /// The currently installed item package for the designated item.
     public func itemPackageForItemWithID(itemID: Int64) -> ItemPackage? {
         if let installedVersion = contentInventory.installedVersionOfItemWithID(itemID) {
-            return try? ItemPackage(path: location.URLByAppendingPathComponent("Item/\(itemID)/\(installedVersion.schemaVersion).\(installedVersion.itemPackageVersion)/package.sqlite").path)
+            return try? ItemPackage(path: location.URLByAppendingPathComponent("Item/\(itemID)/\(installedVersion.schemaVersion).\(installedVersion.itemPackageVersion)/package.sqlite"))
         }
         
         return nil
+    }
+    
+    // TODO: Remove when content is fully integrated into GL
+    public func oldSchoolItemPackageForItemWithExternalID(externalID: String) -> ItemPackage? {
+        print(oldSchoolPackageDirectoryPathForItemWithExternalID(externalID))
+        return oldSchoolPackageDirectoryPathForItemWithExternalID(externalID).flatMap { try? ItemPackage(path: $0.URLByAppendingPathComponent("package.sqlite")) }
+    }
+    
+    public func oldSchoolPackageDirectoryPathForItemWithExternalID(externalID: String) -> NSURL? {
+        print(contentInventory.installedVersionOfItemWithID((catalog?.itemWithExternalID(externalID)!.id)!))
+        guard let item = catalog?.itemWithExternalID(externalID), (schemaVersion, packageVersion) = contentInventory.installedVersionOfItemWithID(item.id) else { return nil }
+        
+        return NSFileManager.defaultManager().URLsForDirectory(.LibraryDirectory, inDomains: .UserDomainMask).last?.URLByAppendingPathComponent("Private Documents").URLByAppendingPathComponent("ItemPackages").URLByAppendingPathComponent("\(item.externalID)_v\(schemaVersion).\(packageVersion)")
     }
     
     /// Downloads and installs a specific version of an item, if not installed already.
@@ -119,7 +145,7 @@ public class ContentController {
         
         if let installedVersion = contentInventory.installedVersionOfItemWithID(item.id) where installedVersion.schemaVersion == Catalog.SchemaVersion && installedVersion.itemPackageVersion == item.version {
             do {
-                let itemPackage = try ItemPackage(path: itemPackageURL.path)
+                let itemPackage = try ItemPackage(path: itemPackageURL)
                 completion(.AlreadyInstalled(itemPackage: itemPackage))
             } catch let error as NSError {
                 completion(.Error(errors: [error]))
@@ -136,7 +162,7 @@ public class ContentController {
                     } catch {}
                     
                     do {
-                        let itemPackage = try ItemPackage(path: itemPackageURL.path)
+                        let itemPackage = try ItemPackage(path: itemPackageURL)
                         
                         try self.contentInventory.setSchemaVersion(Catalog.SchemaVersion, itemPackageVersion: item.version, forItemWithID: item.id)
                         
@@ -173,6 +199,18 @@ public class ContentController {
         } else {
             completion(.Success)
         }
+    }
+    
+    public func isItemWithIDInstalled(itemID: Int64) -> Bool {
+        return contentInventory.isItemWithIDInstalled(itemID: itemID)
+    }
+    
+    public func installedItemIDs() -> [Int64] {
+        return contentInventory.installedItemIDs()
+    }
+    
+    public func installedVersionOfItemWithID(itemID: Int64) -> (schemaVersion: Int, itemPackageVersion: Int)? {
+        return contentInventory.installedVersionOfItemWithID(itemID)
     }
     
 }
