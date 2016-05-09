@@ -35,7 +35,7 @@ public extension ItemPackage {
         static let duration = Expression<Int>("duration")
         
         static func fromRow(row: Row) -> RelatedAudioItem {
-            return RelatedAudioItem(id: row[id], subitemID: row[subitemID], mediaURL: NSURL(string: row[mediaURL])!, fileSize: row[fileSize], duration: row[duration])
+            return RelatedAudioItem(id: row[RelatedAudioItemTable.table[id]], subitemID: row[subitemID], mediaURL: NSURL(string: row[mediaURL])!, fileSize: row[fileSize], duration: row[duration])
         }
         
         static func fromNamespacedRow(row: Row) -> RelatedAudioItem {
@@ -45,7 +45,8 @@ public extension ItemPackage {
     }
     
     public func firstRelatedAudioItemForSubitemWithURI(subitemURI: String) -> RelatedAudioItem? {
-        return db.pluck(RelatedAudioItemTable.table.join(SubitemTable.table.filter(SubitemTable.uri == subitemURI), on: SubitemTable.id == RelatedAudioItemTable.subitemID).order(RelatedAudioItemTable.subitemID)).map { RelatedAudioItemTable.fromRow($0) }
+        print((RelatedAudioItemTable.table.join(SubitemTable.table.filter(SubitemTable.uri == subitemURI), on: SubitemTable.table[SubitemTable.id] == RelatedAudioItemTable.table[RelatedAudioItemTable.subitemID]).order(RelatedAudioItemTable.subitemID)).asSQL())
+        return db.pluck(RelatedAudioItemTable.table.join(SubitemTable.table.filter(SubitemTable.uri == subitemURI), on: SubitemTable.table[SubitemTable.id] == RelatedAudioItemTable.table[RelatedAudioItemTable.subitemID]).order(RelatedAudioItemTable.subitemID)).map { RelatedAudioItemTable.fromRow($0) }
     }
     
     public func relatedAudioItemsForSubitemWithID(subitemID: Int64) -> [RelatedAudioItem] {

@@ -84,9 +84,12 @@ extension ItemPackage {
         var collections = [NavCollection]()
         
         while let navCollection = collection {
+            print(navCollection)
             collections.append(navCollection)
             if let sectionID = navCollection.navSectionID, navSection = navSectionWithID(sectionID) {
                 collection = navCollectionWithID(navSection.navCollectionID)
+            } else {
+                collection = nil
             }
         }
         
